@@ -1,35 +1,53 @@
 #!/bin/sh
 set -e
 
+# ===== Required ENV =====
 if [ -z "$UUID" ]; then
   echo "❌ UUID را در Variables تعریف کنید!"
   exit 1
 fi
 
+PORT=${PORT:-7860}
 WSPATH=${WSPATH:-/api/v1/aichatbot}
 
+echo "Starting with:"
+echo "PORT=${PORT}"
+echo "WSPATH=${WSPATH}"
+
+# ===== Create Xray Config =====
 cat > /etc/xray/config.json << EOF
 {
-  "log": {"loglevel": "warning"},
+  "log": { "loglevel": "warning" },
   "inbounds": [{
     "port": 9000,
     "listen": "127.0.0.1",
     "protocol": "vless",
     "settings": {
-      "clients": [{"id": "${UUID}"}],   # flow رو حذف کن
+      "clients": [{ "id": "${UUID}" }],
       "decryption": "none"
     },
     "streamSettings": {
       "network": "ws",
-      "wsSettings": {"path": "${WSPATH}"}
+      "wsSettings": { "path": "${WSPATH}" }
     }
   }],
-  "outbounds": [{"protocol": "freedom"}]
+  "outbounds": [{ "protocol": "freedom" }]
 }
 EOF
 
-echo "✅ دمو AI راه‌اندازی شد | Path: ${WSPATH}"
+echo "✅ Xray config created"
 
+# ===== Create nginx temp directories =====
+mkdir -p \
+  /tmp/nginx/client_body \
+  /tmp/nginx/proxy \
+  /tmp/nginx/fastcgi \
+  /tmp/nginx/uwsgi \
+  /tmp/nginx/scgi
+
+chown -R xray:xray /tmp/nginx
+
+# ===== Generate nginx config =====
 cat > /tmp/nginx.conf << EOF
 pid /tmp/nginx.pid;
 
@@ -43,7 +61,7 @@ http {
     scgi_temp_path        /tmp/nginx/scgi;
 
     server {
-        listen 7860 default_server;
+        listen ${PORT} default_server;
         server_name _;
 
         access_log /var/log/nginx/access.log;
@@ -64,16 +82,18 @@ http {
             proxy_set_header X-Real-IP \$remote_addr;
             proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto \$scheme;
-            proxy_set_header Origin "https://chat.openai.com";  # برای obfuscation اضافی
             proxy_read_timeout 86400;
         }
     }
 }
 EOF
 
-echo "nginx.conf ساخته شد با WSPATH: ${WSPATH}"
+echo "✅ nginx.conf created"
+grep "listen" /tmp/nginx.conf
 grep "location" /tmp/nginx.conf
 
+# ===== Start Xray =====
 ai-core run -config /etc/xray/config.json &
 
+# ===== Start nginx (foreground) =====
 exec nginx -c /tmp/nginx.conf -g "daemon off;"
