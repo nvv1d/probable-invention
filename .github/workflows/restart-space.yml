@@ -1,0 +1,28 @@
+name: Restart HuggingFace Space
+
+on:
+  workflow_dispatch:
+
+jobs:
+  restart:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+
+      - name: Create Empty Commit
+        run: |
+          git commit --allow-empty -m "Trigger Space Restart"
+
+      - name: Push to HuggingFace
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git remote add hf https://oauth2:${HF_TOKEN}@huggingface.co/spaces/navicl/ai-csm
+          git push hf HEAD:main
