@@ -1,57 +1,35 @@
 #!/bin/sh
 set -e
 
-# ===== Required ENV =====
 if [ -z "$UUID" ]; then
-  echo "❌ UUID"
+  echo "❌ UUID!"
   exit 1
 fi
 
-PORT=${PORT:-7860}
 WSPATH=${WSPATH:-/api/v1/aichatbot}
 
-echo "Starting with:"
-echo "PORT=${PORT}"
-echo "WSPATH=${WSPATH}"
-
-# ===== Create Xray Config =====
 cat > /etc/xray/config.json << EOF
 {
-  "log": {
-    "access": "none",
-    "error": "none",
-    "loglevel": "none"
-  },
+  "log": {"loglevel": "warning"},
   "inbounds": [{
     "port": 9000,
     "listen": "127.0.0.1",
     "protocol": "vless",
     "settings": {
-      "clients": [{ "id": "${UUID}" }],
+      "clients": [{"id": "${UUID}"}], 
       "decryption": "none"
     },
     "streamSettings": {
       "network": "ws",
-      "wsSettings": { "path": "${WSPATH}" }
+      "wsSettings": {"path": "${WSPATH}"}
     }
   }],
-  "outbounds": [{ "protocol": "freedom" }]
+  "outbounds": [{"protocol": "freedom"}]
 }
 EOF
 
-echo "✅ Xray config created"
+echo "✅ | Path: ${WSPATH}"
 
-# ===== Create nginx temp directories =====
-mkdir -p \
-  /tmp/nginx/client_body \
-  /tmp/nginx/proxy \
-  /tmp/nginx/fastcgi \
-  /tmp/nginx/uwsgi \
-  /tmp/nginx/scgi
-
-chown -R xray:xray /tmp/nginx
-
-# ===== Generate nginx config =====
 cat > /tmp/nginx.conf << EOF
 pid /tmp/nginx.pid;
 
@@ -65,7 +43,7 @@ http {
     scgi_temp_path        /tmp/nginx/scgi;
 
     server {
-        listen ${PORT} default_server;
+        listen 7860 default_server;
         server_name _;
 
         access_log /var/log/nginx/access.log;
@@ -86,18 +64,16 @@ http {
             proxy_set_header X-Real-IP \$remote_addr;
             proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto \$scheme;
+            proxy_set_header Origin "https://chat.openai.com";
             proxy_read_timeout 86400;
         }
     }
 }
 EOF
 
-echo "✅ nginx.conf created"
-grep "listen" /tmp/nginx.conf
+echo "nginx.conf WSPATH: ${WSPATH}"
 grep "location" /tmp/nginx.conf
 
-# ===== Start Xray =====
 ai-core run -config /etc/xray/config.json &
 
-# ===== Start nginx (foreground) =====
 exec nginx -c /tmp/nginx.conf -g "daemon off;"
