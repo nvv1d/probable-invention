@@ -3,7 +3,7 @@ set -e
 
 # ===== Required ENV =====
 if [ -z "$UUID" ]; then
-  echo "❌ UUID را در Variables تعریف کنید!"
+  echo "❌ UUID"
   exit 1
 fi
 
