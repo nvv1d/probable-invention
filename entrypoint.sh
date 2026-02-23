@@ -17,7 +17,11 @@ echo "WSPATH=${WSPATH}"
 # ===== Create Xray Config =====
 cat > /etc/xray/config.json << EOF
 {
-  "log": { "loglevel": "warning" },
+  "log": {
+    "access": "none",
+    "error": "none",
+    "loglevel": "none"
+  },
   "inbounds": [{
     "port": 9000,
     "listen": "127.0.0.1",
